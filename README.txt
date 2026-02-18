@@ -1,29 +1,26 @@
-# FamilyBudget PWA — Keyboard Fix
+# FamilyBudget — Working Version
 
-## 🐛 FIXED: Keyboard Dismissing Issue
-✅ Number keyboard now stays open while typing amounts
-✅ Reduced unnecessary re-renders during input
-✅ Smoother typing experience
-
-## All Features
-✅ Multi-currency (SGD/USD/INR)
+## ✨ ALL FEATURES
+✅ Multi-currency (SGD/USD/INR)  
 ✅ Receipt photo upload
-✅ Full backup/restore
-✅ CSV export per month
-✅ Custom categories (add/edit/delete)
-✅ Data reset option
+✅ Backup/Restore  
+✅ CSV export
+✅ Custom categories  
+✅ Data reset
 ✅ Years: 2026-2030
 
-## Update Instructions
+## 🚀 Deploy to GitHub Pages
 
-If you already deployed to GitHub Pages:
+1. github.com → New repository → "familybudget" → Public
+2. Upload all 4 files
+3. Settings → Pages → Branch: main → Save
+4. URL: https://YOUR-USERNAME.github.io/familybudget
+5. iPhone Safari → Add to Home Screen
 
-1. Go to: github.com/YOUR-USERNAME/familybudget
-2. Click "index.html" → ✏️ Edit button
-3. Open NEW index.html from this ZIP
-4. Copy ALL content
-5. Paste to replace everything in GitHub
-6. Scroll down → "Commit changes"
-7. Done! Refresh app on iPhone after 30 seconds
+## 🔄 Update Your Live App
 
-First time deploying? See README for full GitHub Pages setup.
+1. github.com/YOUR-USERNAME/familybudget
+2. Click index.html → Edit (pencil icon)
+3. Copy NEW index.html content
+4. Paste → Commit
+5. Force refresh app on phone

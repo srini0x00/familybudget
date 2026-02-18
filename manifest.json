@@ -1,7 +1,7 @@
 {
   "name": "FamilyBudget",
   "short_name": "Budget",
-  "description": "Family income and expense tracker",
+  "description": "Family expense tracker",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#1e1b4b",
