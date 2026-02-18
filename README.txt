@@ -1,61 +1,29 @@
-# FamilyBudget PWA — Now with Backup & Restore!
+# FamilyBudget PWA — Keyboard Fix
 
-## NEW FEATURES
-✅ Full backup/restore - Transfer ALL data between phones instantly
-✅ CSV export per month - Keep monthly records
+## 🐛 FIXED: Keyboard Dismissing Issue
+✅ Number keyboard now stays open while typing amounts
+✅ Reduced unnecessary re-renders during input
+✅ Smoother typing experience
 
-## Quick Deploy — GitHub Pages (Recommended)
+## All Features
+✅ Multi-currency (SGD/USD/INR)
+✅ Receipt photo upload
+✅ Full backup/restore
+✅ CSV export per month
+✅ Custom categories (add/edit/delete)
+✅ Data reset option
+✅ Years: 2026-2030
 
-1. Create account at github.com
-2. New repository → name: "familybudget" → Public → Create
-3. Upload all 4 files from this folder
-4. Settings → Pages → Source: "main" branch → Save
-5. Your URL: https://YOUR-USERNAME.github.io/familybudget
-6. iPhone: Open in Safari → Share → Add to Home Screen ✓
+## Update Instructions
 
-## How to Use Backup & Restore
+If you already deployed to GitHub Pages:
 
-### Creating a Backup (Old Phone)
-1. Open app → History tab
-2. Tap "💾 Backup" button
-3. Downloads: FamilyBudget_Backup_2025-02-18.json
-4. Save to iCloud Drive or email yourself
-
-### Restoring on New Phone
-1. Install app on new phone (same GitHub URL)
-2. Open app → History tab
-3. Tap "📥 Restore" button
-4. Select your .json backup file
-5. Confirm → ALL data restored instantly!
-
-### Monthly CSV Backups (Already Built-In)
-1. History tab → Select month
-2. Tap "⬇ CSV" button
-3. Downloads monthly data as spreadsheet
-4. Use this for Excel updates or record-keeping
-
-## Files in This Folder
-- index.html   — The app (now with backup/restore!)
-- sw.js        — Service worker (offline mode)
-- manifest.json — PWA settings
-- icon.svg     — App icon
-
-## Updating Your GitHub-Hosted App
 1. Go to: github.com/YOUR-USERNAME/familybudget
-2. Click "index.html" → pencil icon (Edit)
-3. Copy content from the NEW index.html in this folder
-4. Paste to replace everything
-5. Commit changes → App updates automatically!
+2. Click "index.html" → ✏️ Edit button
+3. Open NEW index.html from this ZIP
+4. Copy ALL content
+5. Paste to replace everything in GitHub
+6. Scroll down → "Commit changes"
+7. Done! Refresh app on iPhone after 30 seconds
 
-## Alternative Hosting Options
-
-### Netlify Drop (2 minutes, no account)
-1. Go to: app.netlify.com/drop
-2. Drag entire FamilyBudget folder
-3. Get instant URL → Open in Safari → Add to Home Screen
-
-### Google Drive (1 minute, but limited)
-1. Upload index.html to Drive
-2. Share → Anyone with link → Copy link
-3. Open in Safari → May need to click "Download" first
-Note: No offline mode with this method
+First time deploying? See README for full GitHub Pages setup.

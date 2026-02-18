@@ -30,36 +30,13 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script>
 
-const CATEGORIES = [
-  { name: "Housing & Utilities", icon: "🏠", color: "#4A90D9" },
-  { name: "Groceries & Food", icon: "🛒", color: "#E67E22" },
-  { name: "Transport", icon: "🚗", color: "#8E44AD" },
-  { name: "Children — School Fees", icon: "🏫", color: "#F39C12", child: true },
-  { name: "Children — Tuition", icon: "📚", color: "#F39C12", child: true },
-  { name: "Children — Activities", icon: "⚽", color: "#F39C12", child: true },
-  { name: "Children — Misc", icon: "🎒", color: "#F39C12", child: true },
-  { name: "Insurance", icon: "🛡️", color: "#27AE60" },
-  { name: "Healthcare", icon: "🏥", color: "#E74C3C" },
-  { name: "Personal & Lifestyle", icon: "✨", color: "#16A085" },
-  { name: "Entertainment", icon: "🎬", color: "#2980B9" },
-  { name: "Subscriptions", icon: "📱", color: "#7F8C8D" },
-  { name: "Domestic Help", icon: "🧹", color: "#95A5A6" },
-  { name: "Travel & Holidays", icon: "✈️", color: "#1ABC9C" },
-  { name: "Savings & Investments", icon: "💰", color: "#27AE60" },
-  { name: "Other", icon: "📦", color: "#BDC3C7" },
-];
 
-const INCOME_SOURCES = [
-  { name: "Salary — Person 1", icon: "👤", color: "#27AE60" },
-  { name: "Salary — Person 2", icon: "👤", color: "#2ECC71" },
-  { name: "Bonus / Incentive", icon: "🎯", color: "#27AE60" },
-  { name: "Rental Income", icon: "🏢", color: "#27AE60" },
-  { name: "Other Income", icon: "💵", color: "#27AE60" },
-];
+
+
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const CURRENCIES = ["SGD","USD","INR"];
-const YEARS = [2024,2025,2026,2027];
+const YEARS = [2026,2027,2028,2029,2030];
 
 const currSym = c => c==="INR"?"₹":c==="USD"?"$":"S$";
 const fmt = (n,c="SGD") => `${currSym(c)}${Math.abs(Number(n)).toLocaleString("en-SG",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -101,9 +78,12 @@ function App() {
   const [delConfirm,setDelConfirm]=useState(null);
   const amtRef = useRef();
 
-  useEffect(()=>{saveData(data);},[data]);
+  useEffect(()=>{
+    const timer = setTimeout(() => saveData(data), 500);
+    return () => clearTimeout(timer);
+  },[data]);
 
-  const cats = type==="expense"?CATEGORIES:INCOME_SOURCES;
+  const cats = type==="expense"?(data.expenseCategories||DEFAULT_EXPENSE_CATS):(data.incomeCategories||DEFAULT_INCOME_CATS);
   const showToast = m=>setToast(m);
 
   const handleSubmit = () => {
@@ -127,7 +107,7 @@ function App() {
   const monthEntries=(m,y)=>data.entries.filter(e=>e.month===m&&e.year===y);
   const monthTotal=(m,y,t)=>monthEntries(m,y).filter(e=>e.type===t).reduce((s,e)=>s+e.amount,0);
   const catTotal=(m,y,c)=>monthEntries(m,y).filter(e=>e.category===c).reduce((s,e)=>s+e.amount,0);
-  const allCats=[...CATEGORIES,...INCOME_SOURCES];
+  const allCats=[...(data.expenseCategories||DEFAULT_EXPENSE_CATS),...(data.incomeCategories||DEFAULT_INCOME_CATS)];
   const getCat=name=>allCats.find(c=>c.name===name)||{icon:"📦",color:"#ccc"};
 
   const exportCSV=()=>{
@@ -141,7 +121,64 @@ function App() {
   };
 
   // BACKUP & RESTORE functions
-  const handleBackup = () => {
+  
+  // CATEGORY MANAGEMENT
+  const addCategory = () => {
+    if(!newCatName.trim()) return showToast("Enter category name");
+    const newCat = { name: newCatName.trim(), icon: newCatIcon, color: newCatColor };
+    setData(p => ({
+      ...p,
+      [editCatType==="expense"?"expenseCategories":"incomeCategories"]: [
+        ...(editCatType==="expense"?p.expenseCategories||DEFAULT_EXPENSE_CATS:p.incomeCategories||DEFAULT_INCOME_CATS),
+        newCat
+      ]
+    }));
+    setNewCatName(""); setNewCatIcon("📦"); setNewCatColor("#4A90D9");
+    showToast("Category added!");
+  };
+
+  const updateCategory = (idx) => {
+    if(!newCatName.trim()) return showToast("Enter category name");
+    setData(p => {
+      const key = editCatType==="expense"?"expenseCategories":"incomeCategories";
+      const cats = [...(p[key]||[])];
+      cats[idx] = { ...cats[idx], name: newCatName.trim(), icon: newCatIcon, color: newCatColor };
+      return { ...p, [key]: cats };
+    });
+    setEditingCat(null); setNewCatName(""); setNewCatIcon("📦"); setNewCatColor("#4A90D9");
+    showToast("Category updated!");
+  };
+
+  const deleteCategory = (idx) => {
+    if(!confirm("Delete this category? Existing entries will keep their category name.")) return;
+    setData(p => {
+      const key = editCatType==="expense"?"expenseCategories":"incomeCategories";
+      const cats = [...(p[key]||[])];
+      cats.splice(idx, 1);
+      return { ...p, [key]: cats };
+    });
+    showToast("Category deleted!");
+  };
+
+  const startEditCategory = (idx, cat) => {
+    setEditingCat(idx);
+    setNewCatName(cat.name);
+    setNewCatIcon(cat.icon);
+    setNewCatColor(cat.color);
+  };
+
+  const resetAllData = () => {
+    if(!showResetConfirm) {
+      setShowResetConfirm(true);
+      return;
+    }
+    setData(initData());
+    setShowResetConfirm(false);
+    setShowSettings(false);
+    showToast("All data reset!");
+  };
+
+const handleBackup = () => {
     const backup = {
       version: "1.0",
       exportDate: new Date().toISOString(),
@@ -211,7 +248,10 @@ function App() {
         h('button',{key:v,onClick:()=>setView(v),style:{padding:"8px 12px",borderRadius:10,border:"none",background:view===v?"#fff":"transparent",color:view===v?"#1e1b4b":"rgba(255,255,255,0.65)",fontWeight:view===v?700:500,fontSize:13,cursor:"pointer",WebkitTapHighlightColor:"transparent"}},l)
       )
     ),
-    h('div',{style:{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.6)",background:"rgba(255,255,255,0.1)",padding:"4px 10px",borderRadius:20}},data.currency)
+    h('div',{style:{display:"flex",gap:6,alignItems:"center"}},
+      h('button',{onClick:()=>setShowSettings(true),style:{background:"rgba(255,255,255,0.1)",border:"none",color:"rgba(255,255,255,0.85)",borderRadius:20,padding:"6px 12px",cursor:"pointer",fontSize:13,fontWeight:700,WebkitTapHighlightColor:"transparent"}},"⚙️"),
+      h('div',{style:{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.6)",background:"rgba(255,255,255,0.1)",padding:"4px 10px",borderRadius:20}},data.currency)
+    )
   );
 
   // LOG VIEW
@@ -249,11 +289,11 @@ function App() {
       h('p',{style:sec},"Amount"),
       h('div',{style:{position:"relative",marginBottom:16}},
         h('span',{style:{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:20,fontWeight:800,color:"#1e1b4b",pointerEvents:"none"}},currSym(data.currency)),
-        h('input',{ref:amtRef,type:"number",inputMode:"decimal",value:amount,onChange:e=>setAmount(e.target.value),placeholder:"0.00",onKeyDown:e=>e.key==="Enter"&&handleSubmit(),style:{...inp,paddingLeft:46,fontSize:24,fontWeight:800,color:"#1e1b4b",border:"2px solid #1e1b4b",background:"#f5f3ff"}})
+        h('input',{ref:amtRef,type:"number",inputMode:"decimal",value:amount,onChange:e=>setAmount(e.target.value),placeholder:"0.00",onKeyDown:e=>e.key==="Enter"&&handleSubmit(),autoComplete:"off",key:"amount-input",id:"amount-input",style:{...inp,paddingLeft:46,fontSize:24,fontWeight:800,color:"#1e1b4b",border:"2px solid #1e1b4b",background:"#f5f3ff"}})
       ),
       // notes
       h('p',{style:sec},"Notes (optional)"),
-      h('input',{type:"text",value:notes,onChange:e=>setNotes(e.target.value),placeholder:"e.g. NTUC groceries, Child 1 math tuition...",onKeyDown:e=>e.key==="Enter"&&handleSubmit(),style:{...inp,marginBottom:18}}),
+      h('input',{type:"text",value:notes,onChange:e=>setNotes(e.target.value),placeholder:"e.g. NTUC groceries, Child 1 math tuition...",onKeyDown:e=>e.key==="Enter"&&handleSubmit(),autoComplete:"off",key:"notes-input",style:{...inp,marginBottom:18}}),
       // submit
       h('button',{onClick:handleSubmit,disabled:!category||!amount,style:{width:"100%",padding:15,border:"none",borderRadius:14,background:(!category||!amount)?"#e5e7eb":"linear-gradient(135deg,#1e1b4b,#312e81)",color:(!category||!amount)?"#9ca3af":"#fff",fontWeight:800,fontSize:15,cursor:(!category||!amount)?"not-allowed":"pointer",boxShadow:(!category||!amount)?"none":"0 4px 16px rgba(30,27,75,0.35)",WebkitTapHighlightColor:"transparent"}},
         editId?"✏️ Update Entry":`+ Log ${type==="expense"?"Expense":"Income"}`)
@@ -357,7 +397,7 @@ function App() {
         h('p',{style:sec},"Expense Breakdown"),
         exp===0
           ?h('p',{style:{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"12px 0"}},"No expenses logged.")
-          :CATEGORIES.map(cat=>{
+          :(data.expenseCategories||DEFAULT_EXPENSE_CATS).map(cat=>{
               const t=catTotal(filterMonth,filterYear,cat.name);
               if(!t)return null;
               const pct=exp>0?Math.min(100,(t/exp)*100):0;
@@ -396,7 +436,7 @@ function App() {
           h('div',{style:{fontWeight:700,fontSize:13,color:"#15803d",marginBottom:8}},"💵 INCOME"),
           inc===0
             ?h('p',{style:{fontSize:12,color:"#9ca3af",margin:0}},"No income logged")
-            :INCOME_SOURCES.map(src=>{
+            :(data.incomeCategories||DEFAULT_INCOME_CATS).map(src=>{
                 const entries=data.entries.filter(e=>e.month===filterMonth&&e.year===filterYear&&e.category===src.name&&e.type==="income");
                 const t=entries.reduce((s,e)=>s+e.amount,0);
                 if(!t)return null;
@@ -410,7 +450,7 @@ function App() {
           h('div',{style:{fontWeight:700,fontSize:13,color:"#b91c1c",marginBottom:8}},"💸 EXPENSES"),
           exp===0
             ?h('p',{style:{fontSize:12,color:"#9ca3af",margin:0}},"No expenses logged")
-            :CATEGORIES.map(cat=>{
+            :(data.expenseCategories||DEFAULT_EXPENSE_CATS).map(cat=>{
                 const t=catTotal(filterMonth,filterYear,cat.name);
                 if(!t)return null;
                 return h('div',{key:cat.name,style:{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #fecaca",fontSize:13}},
@@ -429,6 +469,61 @@ function App() {
       view==="log"&&h(LogView,null),
       view==="history"&&h(HistoryView,null),
       view==="summary"&&h(SummaryView,null)
+    ),
+    showSettings&&h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:250,overflowY:"auto",padding:"20px 0"}},
+      h('div',{style:{background:"#fff",borderRadius:20,padding:"24px 20px",maxWidth:480,width:"90%",marginTop:20}},
+        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}},
+          h('h2',{style:{fontSize:18,fontWeight:800,margin:0,color:"#1e1b4b"}},"⚙️ Settings"),
+          h('button',{onClick:()=>{setShowSettings(false);setEditingCat(null);setShowResetConfirm(false);},style:{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#9ca3af"}},"✕")
+        ),
+
+        // Category Editor
+        h('div',{style:{marginBottom:24}},
+          h('h3',{style:{fontSize:14,fontWeight:700,color:"#6b7280",marginBottom:12,textTransform:"uppercase",letterSpacing:1}},"Manage Categories"),
+          h('div',{style:{display:"flex",gap:6,marginBottom:14}},
+            h('button',{onClick:()=>setEditCatType("expense"),style:{flex:1,padding:"8px",border:`2px solid ${editCatType==="expense"?"#ef4444":"#e5e7eb"}`,borderRadius:10,background:editCatType==="expense"?"#fef2f2":"#fff",color:editCatType==="expense"?"#ef4444":"#6b7280",fontWeight:700,fontSize:13,cursor:"pointer",WebkitTapHighlightColor:"transparent"}},"💸 Expenses"),
+            h('button',{onClick:()=>setEditCatType("income"),style:{flex:1,padding:"8px",border:`2px solid ${editCatType==="income"?"#22c55e":"#e5e7eb"}`,borderRadius:10,background:editCatType==="income"?"#f0fdf4":"#fff",color:editCatType==="income"?"#22c55e":"#6b7280",fontWeight:700,fontSize:13,cursor:"pointer",WebkitTapHighlightColor:"transparent"}},"💵 Income")
+          ),
+
+          // Add/Edit category form
+          h('div',{style:{background:"#f9fafb",borderRadius:12,padding:14,marginBottom:12}},
+            h('div',{style:{fontSize:12,fontWeight:700,color:"#6b7280",marginBottom:8}},editingCat!==null?"Edit Category":"Add New Category"),
+            h('input',{type:"text",placeholder:"Category name",value:newCatName,onChange:e=>setNewCatName(e.target.value),style:{width:"100%",padding:"10px",border:"2px solid #e5e7eb",borderRadius:8,fontSize:14,marginBottom:8,boxSizing:"border-box"}}),
+            h('div',{style:{display:"flex",gap:8,marginBottom:8}},
+              h('input',{type:"text",placeholder:"Icon",value:newCatIcon,onChange:e=>setNewCatIcon(e.target.value),maxLength:2,style:{width:60,padding:"10px",border:"2px solid #e5e7eb",borderRadius:8,fontSize:18,textAlign:"center"}}),
+              h('input',{type:"color",value:newCatColor,onChange:e=>setNewCatColor(e.target.value),style:{width:60,height:42,border:"2px solid #e5e7eb",borderRadius:8,cursor:"pointer"}}),
+              h('button',{onClick:()=>editingCat!==null?updateCategory(editingCat):addCategory(),style:{flex:1,padding:"10px",background:"#1e1b4b",color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:13,cursor:"pointer",WebkitTapHighlightColor:"transparent"}},editingCat!==null?"Update":"+ Add")
+            ),
+            editingCat!==null&&h('button',{onClick:()=>{setEditingCat(null);setNewCatName("");setNewCatIcon("📦");setNewCatColor("#4A90D9");},style:{width:"100%",padding:"8px",background:"#f3f4f6",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}},"Cancel Edit")
+          ),
+
+          // List of categories
+          h('div',{style:{maxHeight:240,overflowY:"auto"}},
+            (editCatType==="expense"?(data.expenseCategories||DEFAULT_EXPENSE_CATS):(data.incomeCategories||DEFAULT_INCOME_CATS)).map((cat,idx)=>
+              h('div',{key:idx,style:{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,background:"#fff",border:"1px solid #e5e7eb",marginBottom:6}},
+                h('div',{style:{width:32,height:32,borderRadius:8,background:`${cat.color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}},cat.icon),
+                h('div',{style:{flex:1,fontWeight:600,fontSize:13,color:"#374151"}},cat.name),
+                h('button',{onClick:()=>startEditCategory(idx,cat),style:{background:"#f3f4f6",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,cursor:"pointer",fontWeight:600}},"✏️ Edit"),
+                h('button',{onClick:()=>deleteCategory(idx),style:{background:"#fee2e2",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,cursor:"pointer",fontWeight:600}},"🗑️")
+              )
+            )
+          )
+        ),
+
+        // Data Reset
+        h('div',{style:{borderTop:"1px solid #e5e7eb",paddingTop:20}},
+          h('h3',{style:{fontSize:14,fontWeight:700,color:"#6b7280",marginBottom:12,textTransform:"uppercase",letterSpacing:1}},"Danger Zone"),
+          !showResetConfirm
+            ? h('button',{onClick:resetAllData,style:{width:"100%",padding:"12px",background:"#fee2e2",color:"#dc2626",border:"2px solid #fecaca",borderRadius:10,fontWeight:700,fontSize:14,cursor:"pointer",WebkitTapHighlightColor:"transparent"}},"🗑️ Reset All Data")
+            : h('div',{style:{background:"#fef2f2",border:"2px solid #fecaca",borderRadius:10,padding:14}},
+                h('p',{style:{fontSize:13,fontWeight:700,color:"#dc2626",marginBottom:10}},"⚠️ Are you sure? This will delete ALL entries, receipts, and reset categories to default. This cannot be undone!"),
+                h('div',{style:{display:"flex",gap:8}},
+                  h('button',{onClick:()=>setShowResetConfirm(false),style:{flex:1,padding:"10px",background:"#fff",border:"2px solid #e5e7eb",borderRadius:8,fontWeight:700,cursor:"pointer"}},"Cancel"),
+                  h('button',{onClick:resetAllData,style:{flex:1,padding:"10px",background:"#dc2626",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer"}},"Yes, Delete Everything")
+                )
+              )
+        )
+      )
     ),
     delConfirm&&h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}},
       h('div',{style:{background:"#fff",borderRadius:20,padding:28,maxWidth:300,width:"90%",textAlign:"center"}},
