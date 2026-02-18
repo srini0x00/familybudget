@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+
+  <!-- PWA / iOS home screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="FamilyBudget"/>
+  <meta name="theme-color" content="#1e1b4b"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon.svg"/>
+
+  <title>FamilyBudget</title>
+
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    html,body{height:100%;background:#1e1b4b;overscroll-behavior:none;}
+    #root{min-height:100%;}
+    input,select,button{font-family:inherit;}
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+    ::-webkit-scrollbar{width:4px;}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2);border-radius:2px;}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script>
+
+const CATEGORIES = [
+  { name: "Housing & Utilities", icon: "🏠", color: "#4A90D9" },
+  { name: "Groceries & Food", icon: "🛒", color: "#E67E22" },
+  { name: "Transport", icon: "🚗", color: "#8E44AD" },
+  { name: "Children — School Fees", icon: "🏫", color: "#F39C12", child: true },
+  { name: "Children — Tuition", icon: "📚", color: "#F39C12", child: true },
+  { name: "Children — Activities", icon: "⚽", color: "#F39C12", child: true },
+  { name: "Children — Misc", icon: "🎒", color: "#F39C12", child: true },
+  { name: "Insurance", icon: "🛡️", color: "#27AE60" },
+  { name: "Healthcare", icon: "🏥", color: "#E74C3C" },
+  { name: "Personal & Lifestyle", icon: "✨", color: "#16A085" },
+  { name: "Entertainment", icon: "🎬", color: "#2980B9" },
+  { name: "Subscriptions", icon: "📱", color: "#7F8C8D" },
+  { name: "Domestic Help", icon: "🧹", color: "#95A5A6" },
+  { name: "Travel & Holidays", icon: "✈️", color: "#1ABC9C" },
+  { name: "Savings & Investments", icon: "💰", color: "#27AE60" },
+  { name: "Other", icon: "📦", color: "#BDC3C7" },
+];
+
+const INCOME_SOURCES = [
+  { name: "Salary — Person 1", icon: "👤", color: "#27AE60" },
+  { name: "Salary — Person 2", icon: "👤", color: "#2ECC71" },
+  { name: "Bonus / Incentive", icon: "🎯", color: "#27AE60" },
+  { name: "Rental Income", icon: "🏢", color: "#27AE60" },
+  { name: "Other Income", icon: "💵", color: "#27AE60" },
+];
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const CURRENCIES = ["SGD","USD","INR"];
+const YEARS = [2024,2025,2026,2027];
+
+const currSym = c => c==="INR"?"₹":c==="USD"?"$":"S$";
+const fmt = (n,c="SGD") => `${currSym(c)}${Math.abs(Number(n)).toLocaleString("en-SG",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const todayStr = () => new Date().toISOString().slice(0,10);
+const monthFromDate = d => MONTHS[new Date(d).getMonth()];
+const yearFromDate  = d => new Date(d).getFullYear();
+
+const STORE_KEY = "fambudget_v2";
+const loadData  = () => { try { const r=localStorage.getItem(STORE_KEY); return r?JSON.parse(r):null; } catch{return null;} };
+const saveData  = d  => { try { localStorage.setItem(STORE_KEY,JSON.stringify(d)); } catch{} };
+const initData  = () => ({ currency:"SGD", year:new Date().getFullYear(), entries:[] });
+
+const { useState, useEffect, useRef } = React;
+
+function Toast({msg,onDone}) {
+  useEffect(()=>{const t=setTimeout(onDone,2000);return()=>clearTimeout(t);},[]);
+  return React.createElement('div',{style:{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:"#1a1a2e",color:"#fff",padding:"11px 24px",borderRadius:40,fontSize:13,fontWeight:700,zIndex:9999,boxShadow:"0 8px 32px rgba(0,0,0,0.4)",display:"flex",alignItems:"center",gap:8,whiteSpace:"nowrap"}},
+    React.createElement('span',{style:{color:"#4ade80"}},"✓")," ",msg);
+}
+
+function CatPill({cat,selected,onClick}) {
+  const active = selected===cat.name;
+  return React.createElement('button',{onClick:()=>onClick(cat.name),style:{display:"flex",alignItems:"center",gap:5,padding:"9px 13px",borderRadius:30,border:`2px solid ${active?cat.color:"#e5e7eb"}`,background:active?`${cat.color}18`:"#f9fafb",color:active?cat.color:"#6b7280",fontSize:13,fontWeight:active?700:500,cursor:"pointer",transition:"all .15s",whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}},
+    React.createElement('span',null,cat.icon),React.createElement('span',null,cat.name));
+}
+
+function App() {
+  const [data,setData]         = useState(()=>loadData()||initData());
+  const [view,setView]         = useState("log");
+  const [type,setType]         = useState("expense");
+  const [category,setCategory] = useState("");
+  const [amount,setAmount]     = useState("");
+  const [notes,setNotes]       = useState("");
+  const [entryDate,setEntryDate]= useState(todayStr());
+  const [filterMonth,setFilterMonth]=useState(MONTHS[new Date().getMonth()]);
+  const [filterYear,setFilterYear]  =useState(new Date().getFullYear());
+  const [toast,setToast]       = useState(null);
+  const [editId,setEditId]     = useState(null);
+  const [delConfirm,setDelConfirm]=useState(null);
+  const amtRef = useRef();
+
+  useEffect(()=>{saveData(data);},[data]);
+
+  const cats = type==="expense"?CATEGORIES:INCOME_SOURCES;
+  const showToast = m=>setToast(m);
+
+  const handleSubmit = () => {
+    if(!category) return showToast("Pick a category");
+    if(!amount||isNaN(amount)||Number(amount)<=0) return showToast("Enter a valid amount");
+    const month=monthFromDate(entryDate), year=yearFromDate(entryDate);
+    if(editId){
+      setData(p=>({...p,entries:p.entries.map(e=>e.id===editId?{...e,date:entryDate,month,year,type,category,amount:Number(amount),notes}:e)}));
+      setEditId(null); showToast("Entry updated!");
+    } else {
+      setData(p=>({...p,entries:[...p.entries,{id:Date.now(),date:entryDate,month,year,type,category,amount:Number(amount),notes,currency:p.currency}]}));
+      showToast(type==="expense"?"Expense logged!":"Income logged!");
+    }
+    setAmount(""); setNotes(""); setCategory("");
+    setTimeout(()=>amtRef.current?.focus(),50);
+  };
+
+  const handleEdit = e=>{setEditId(e.id);setType(e.type);setCategory(e.category);setAmount(String(e.amount));setNotes(e.notes||"");setEntryDate(e.date);setView("log");};
+  const handleDelete = id=>{setData(p=>({...p,entries:p.entries.filter(e=>e.id!==id)}));setDelConfirm(null);showToast("Deleted");};
+
+  const monthEntries=(m,y)=>data.entries.filter(e=>e.month===m&&e.year===y);
+  const monthTotal=(m,y,t)=>monthEntries(m,y).filter(e=>e.type===t).reduce((s,e)=>s+e.amount,0);
+  const catTotal=(m,y,c)=>monthEntries(m,y).filter(e=>e.category===c).reduce((s,e)=>s+e.amount,0);
+  const allCats=[...CATEGORIES,...INCOME_SOURCES];
+  const getCat=name=>allCats.find(c=>c.name===name)||{icon:"📦",color:"#ccc"};
+
+  const exportCSV=()=>{
+    const rows=[["Date","Month","Year","Type","Category","Amount","Currency","Notes"]];
+    monthEntries(filterMonth,filterYear).forEach(e=>rows.push([e.date,e.month,e.year,e.type,e.category,e.amount,e.currency||data.currency,e.notes||""]));
+    const csv=rows.map(r=>r.map(c=>`"${c}"`).join(",")).join("\n");
+    const blob=new Blob([csv],{type:"text/csv"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=`budget_${filterMonth}_${filterYear}.csv`;a.click();
+    showToast("CSV exported!");
+  };
+
+  // BACKUP & RESTORE functions
+  const handleBackup = () => {
+    const backup = {
+      version: "1.0",
+      exportDate: new Date().toISOString(),
+      data: data
+    };
+    const json = JSON.stringify(backup, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `FamilyBudget_Backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    showToast("Backup downloaded!");
+  };
+
+  const handleRestore = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const backup = JSON.parse(event.target.result);
+          if (!backup.data || !backup.data.entries) {
+            showToast("Invalid backup file");
+            return;
+          }
+          // Merge or replace - let's ask user
+          if (data.entries.length > 0) {
+            if (confirm(`You have ${data.entries.length} existing entries. Replace all data with backup (${backup.data.entries.length} entries)?`)) {
+              setData(backup.data);
+              showToast(`Restored ${backup.data.entries.length} entries!`);
+            }
+          } else {
+            setData(backup.data);
+            showToast(`Restored ${backup.data.entries.length} entries!`);
+          }
+        } catch (err) {
+          showToast("Error reading backup file");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+
+
+  const h=React.createElement;
+  const card={background:"#fff",borderRadius:18,padding:20,boxShadow:"0 4px 24px rgba(0,0,0,0.10)",marginBottom:14};
+  const sec={fontSize:11,fontWeight:700,color:"#9ca3af",letterSpacing:1.5,textTransform:"uppercase",marginBottom:12};
+  const inp={width:"100%",padding:"12px 14px",border:"2px solid #e5e7eb",borderRadius:12,fontSize:15,outline:"none",fontFamily:"inherit",background:"#fafafa",boxSizing:"border-box",WebkitAppearance:"none"};
+  const eRow={display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:"1px solid #f3f4f6"};
+
+  const iconBox=col=>({width:42,height:42,borderRadius:12,flexShrink:0,background:`${col}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:19});
+  const editBtn={background:"#f3f4f6",border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,flexShrink:0};
+  const delBtn={background:"#fee2e2",border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:14,flexShrink:0};
+
+  // NAV
+  const Nav=()=>h('div',{style:{background:"rgba(255,255,255,0.07)",backdropFilter:"blur(16px)",borderBottom:"1px solid rgba(255,255,255,0.1)",padding:"env(safe-area-inset-top,14px) 16px 14px",position:"sticky",top:0,zIndex:50,display:"flex",alignItems:"center",justifyContent:"space-between"}},
+    h('div',{style:{fontWeight:800,fontSize:18,color:"#fff",letterSpacing:"-0.5px"}},"💼 FamilyBudget"),
+    h('div',{style:{display:"flex",background:"rgba(255,255,255,0.08)",borderRadius:12,padding:3,gap:2}},
+      [["log","Log"],["history","Hist"],["summary","Summary"]].map(([v,l])=>
+        h('button',{key:v,onClick:()=>setView(v),style:{padding:"8px 12px",borderRadius:10,border:"none",background:view===v?"#fff":"transparent",color:view===v?"#1e1b4b":"rgba(255,255,255,0.65)",fontWeight:view===v?700:500,fontSize:13,cursor:"pointer",WebkitTapHighlightColor:"transparent"}},l)
+      )
+    ),
+    h('div',{style:{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.6)",background:"rgba(255,255,255,0.1)",padding:"4px 10px",borderRadius:20}},data.currency)
+  );
+
+  // LOG VIEW
+  const LogView=()=>h('div',null,
+    // settings
+    h('div',{style:{...card,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",padding:"12px 16px"}},
+      h('span',{style:{fontSize:12,fontWeight:700,color:"#6b7280"}},"Currency:"),
+      CURRENCIES.map(c=>h('button',{key:c,onClick:()=>setData(p=>({...p,currency:c})),style:{padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:700,border:`2px solid ${data.currency===c?"#1e1b4b":"#e5e7eb"}`,background:data.currency===c?"#1e1b4b":"#fff",color:data.currency===c?"#fff":"#6b7280",cursor:"pointer",WebkitTapHighlightColor:"transparent"}},c)),
+      h('div',{style:{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}},
+        h('span',{style:{fontSize:12,fontWeight:700,color:"#6b7280"}},"Year:"),
+        h('select',{value:data.year,onChange:e=>setData(p=>({...p,year:Number(e.target.value)})),style:{...inp,width:85,padding:"6px 10px",fontSize:13}},YEARS.map(y=>h('option',{key:y},y))),
+        h('button',{onClick:handleBackup,style:{marginLeft:8,padding:"6px 12px",background:"#16a34a",color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,WebkitTapHighlightColor:"transparent"}},"💾")
+      )
+    ),
+    h('div',{style:card},
+      editId&&h('div',{style:{background:"#fefce8",border:"1px solid #fde68a",borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        h('span',{style:{fontSize:13,fontWeight:700,color:"#92400e"}},"✏️ Editing entry"),
+        h('button',{onClick:()=>{setEditId(null);setAmount("");setNotes("");setCategory("");},style:{background:"none",border:"none",cursor:"pointer",color:"#92400e",fontWeight:700,fontSize:18}},"✕")
+      ),
+      // type toggle
+      h('div',{style:{display:"flex",borderRadius:12,overflow:"hidden",border:"2px solid #e5e7eb",marginBottom:18}},
+        [["expense","💸 Expense","#ef4444"],["income","💵 Income","#22c55e"]].map(([t,l,col])=>
+          h('button',{key:t,onClick:()=>{setType(t);setCategory("");},style:{flex:1,padding:"12px 0",border:"none",cursor:"pointer",background:type===t?col:"transparent",color:type===t?"#fff":"#9ca3af",fontWeight:700,fontSize:14,transition:"all .2s",WebkitTapHighlightColor:"transparent"}},l)
+        )
+      ),
+      // date
+      h('p',{style:sec},"Date"),
+      h('input',{type:"date",value:entryDate,onChange:e=>setEntryDate(e.target.value),style:{...inp,marginBottom:16}}),
+      // category
+      h('p',{style:sec},"Category"),
+      h('div',{style:{display:"flex",flexWrap:"wrap",gap:7,marginBottom:18,maxHeight:170,overflowY:"auto",WebkitOverflowScrolling:"touch"}},
+        cats.map(cat=>h(CatPill,{key:cat.name,cat,selected:category,onClick:setCategory}))
+      ),
+      // amount
+      h('p',{style:sec},"Amount"),
+      h('div',{style:{position:"relative",marginBottom:16}},
+        h('span',{style:{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:20,fontWeight:800,color:"#1e1b4b",pointerEvents:"none"}},currSym(data.currency)),
+        h('input',{ref:amtRef,type:"number",inputMode:"decimal",value:amount,onChange:e=>setAmount(e.target.value),placeholder:"0.00",onKeyDown:e=>e.key==="Enter"&&handleSubmit(),style:{...inp,paddingLeft:46,fontSize:24,fontWeight:800,color:"#1e1b4b",border:"2px solid #1e1b4b",background:"#f5f3ff"}})
+      ),
+      // notes
+      h('p',{style:sec},"Notes (optional)"),
+      h('input',{type:"text",value:notes,onChange:e=>setNotes(e.target.value),placeholder:"e.g. NTUC groceries, Child 1 math tuition...",onKeyDown:e=>e.key==="Enter"&&handleSubmit(),style:{...inp,marginBottom:18}}),
+      // submit
+      h('button',{onClick:handleSubmit,disabled:!category||!amount,style:{width:"100%",padding:15,border:"none",borderRadius:14,background:(!category||!amount)?"#e5e7eb":"linear-gradient(135deg,#1e1b4b,#312e81)",color:(!category||!amount)?"#9ca3af":"#fff",fontWeight:800,fontSize:15,cursor:(!category||!amount)?"not-allowed":"pointer",boxShadow:(!category||!amount)?"none":"0 4px 16px rgba(30,27,75,0.35)",WebkitTapHighlightColor:"transparent"}},
+        editId?"✏️ Update Entry":`+ Log ${type==="expense"?"Expense":"Income"}`)
+    ),
+    // recent
+    h('div',{style:card},
+      h('p',{style:sec},"Recent Entries"),
+      data.entries.length===0&&h('p',{style:{color:"#9ca3af",textAlign:"center",padding:"24px 0",fontSize:14}},"No entries yet — start logging above!"),
+      [...data.entries].reverse().slice(0,8).map(e=>{
+        const cat=getCat(e.category);
+        return h('div',{key:e.id,style:eRow},
+          h('div',{style:iconBox(cat.color)},cat.icon),
+          h('div',{style:{flex:1,minWidth:0}},
+            h('div',{style:{fontWeight:700,fontSize:13,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},e.category),
+            h('div',{style:{fontSize:11,color:"#9ca3af"}},e.date+(e.notes?` · ${e.notes}`:""))
+          ),
+          h('div',{style:{fontWeight:800,fontSize:14,color:e.type==="expense"?"#ef4444":"#22c55e",marginRight:4}},
+            (e.type==="expense"?"−":"+")+fmt(e.amount,e.currency||data.currency)),
+          h('button',{onClick:()=>handleEdit(e),style:editBtn},"✏️"),
+          h('button',{onClick:()=>setDelConfirm(e.id),style:delBtn},"🗑")
+        );
+      })
+    )
+  );
+
+  // HISTORY VIEW
+  const HistoryView=()=>{
+    const entries=[...monthEntries(filterMonth,filterYear)].reverse();
+    const inc=entries.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
+    const exp=entries.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
+    return h('div',null,
+      h('div',{style:{...card,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",padding:"12px 16px"}},
+        h('select',{value:filterMonth,onChange:e=>setFilterMonth(e.target.value),style:{...inp,width:"auto",padding:"7px 12px",fontSize:13}},MONTHS.map(m=>h('option',{key:m},m))),
+        h('select',{value:filterYear,onChange:e=>setFilterYear(Number(e.target.value)),style:{...inp,width:85,padding:"7px 12px",fontSize:13}},YEARS.map(y=>h('option',{key:y},y))),
+        h('button',{onClick:handleBackup,style:{marginLeft:8,padding:"6px 12px",background:"#16a34a",color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,WebkitTapHighlightColor:"transparent"}},"💾"),
+        h('div',{style:{marginLeft:"auto",display:"flex",gap:6}},
+          h('button',{onClick:handleBackup,style:{padding:"7px 14px",background:"#16a34a",color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,WebkitTapHighlightColor:"transparent"}},"💾 Backup"),
+          h('button',{onClick:handleRestore,style:{padding:"7px 14px",background:"#7c3aed",color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,WebkitTapHighlightColor:"transparent"}},"📥 Restore"),
+          h('button',{onClick:exportCSV,style:{padding:"7px 14px",background:"#1e1b4b",color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,WebkitTapHighlightColor:"transparent"}},"⬇ CSV")
+        )
+      ),
+      h('div',{style:{...card,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}},
+        [["Income",inc,"#22c55e","#f0fdf4","💵"],["Expenses",exp,"#ef4444","#fef2f2","💸"],["Net",inc-exp,inc-exp>=0?"#3b82f6":"#ef4444","#eff6ff","📊"]].map(([l,v,col,bg,ic])=>
+          h('div',{key:l,style:{textAlign:"center",padding:"12px 6px",background:bg,borderRadius:12}},
+            h('div',{style:{fontSize:18}},ic),
+            h('div',{style:{fontSize:10,color:"#9ca3af",fontWeight:700,margin:"4px 0 2px",textTransform:"uppercase"}},l),
+            h('div',{style:{fontSize:12,fontWeight:800,color:col}},(v<0?"−":"")+fmt(Math.abs(v),data.currency))
+          )
+        )
+      ),
+      h('div',{style:card},
+        h('p',{style:sec},`${filterMonth} ${filterYear} — ${entries.length} entries`),
+        entries.length===0&&h('p',{style:{color:"#9ca3af",textAlign:"center",padding:"24px 0",fontSize:14}},"No entries for this month."),
+        entries.map(e=>{
+          const cat=getCat(e.category);
+          return h('div',{key:e.id,style:eRow},
+            h('div',{style:iconBox(cat.color)},cat.icon),
+            h('div',{style:{flex:1,minWidth:0}},
+              h('div',{style:{fontWeight:700,fontSize:13,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},e.category),
+              h('div',{style:{fontSize:11,color:"#9ca3af"}},e.date+(e.notes?` · ${e.notes}`:""))
+            ),
+            h('div',{style:{fontWeight:800,fontSize:14,color:e.type==="expense"?"#ef4444":"#22c55e",marginRight:4}},
+              (e.type==="expense"?"−":"+")+fmt(e.amount,e.currency||data.currency)),
+            h('button',{onClick:()=>handleEdit(e),style:editBtn},"✏️"),
+            h('button',{onClick:()=>setDelConfirm(e.id),style:delBtn},"🗑")
+          );
+        })
+      )
+    );
+  };
+
+  // SUMMARY VIEW
+  const SummaryView=()=>{
+    const inc=monthTotal(filterMonth,filterYear,"income");
+    const exp=monthTotal(filterMonth,filterYear,"expense");
+    const net=inc-exp;
+    const rate=inc>0?(net/inc*100).toFixed(1):"—";
+    const childCats=["Children — School Fees","Children — Tuition","Children — Activities","Children — Misc"];
+    const childTotal=childCats.reduce((s,c)=>s+catTotal(filterMonth,filterYear,c),0);
+    return h('div',null,
+      h('div',{style:{...card,display:"flex",gap:8,alignItems:"center",padding:"12px 16px"}},
+        h('select',{value:filterMonth,onChange:e=>setFilterMonth(e.target.value),style:{...inp,width:"auto",padding:"7px 12px",fontSize:13}},MONTHS.map(m=>h('option',{key:m},m))),
+        h('select',{value:filterYear,onChange:e=>setFilterYear(Number(e.target.value)),style:{...inp,width:85,padding:"7px 12px",fontSize:13}},YEARS.map(y=>h('option',{key:y},y))),
+        h('button',{onClick:handleBackup,style:{marginLeft:8,padding:"6px 12px",background:"#16a34a",color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,WebkitTapHighlightColor:"transparent"}},"💾")
+      ),
+      h('div',{style:card},
+        h('p',{style:sec},`Summary — ${filterMonth} ${filterYear}`),
+        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}},
+          [["Total Income",fmt(inc,data.currency),"#16a34a","#f0fdf4","💵"],
+           ["Total Expenses",fmt(exp,data.currency),"#dc2626","#fef2f2","💸"],
+           ["Net Savings",(net<0?"−":"")+fmt(Math.abs(net),data.currency),net>=0?"#2563eb":"#dc2626","#eff6ff","💰"],
+           ["Savings Rate",`${rate}%`,"#7c3aed","#f5f3ff","📊"]
+          ].map(([l,v,col,bg,ic])=>
+            h('div',{key:l,style:{padding:"16px 14px",borderRadius:14,background:bg}},
+              h('div',{style:{fontSize:22}},ic),
+              h('div',{style:{fontSize:10,color:"#9ca3af",fontWeight:700,marginTop:6,textTransform:"uppercase",letterSpacing:1}},l),
+              h('div',{style:{fontSize:16,fontWeight:800,color:col,marginTop:3}},v)
+            )
+          )
+        ),
+        h('p',{style:sec},"Expense Breakdown"),
+        exp===0
+          ?h('p',{style:{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"12px 0"}},"No expenses logged.")
+          :CATEGORIES.map(cat=>{
+              const t=catTotal(filterMonth,filterYear,cat.name);
+              if(!t)return null;
+              const pct=exp>0?Math.min(100,(t/exp)*100):0;
+              return h('div',{key:cat.name,style:{marginBottom:10}},
+                h('div',{style:{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}},
+                  h('span',{style:{fontWeight:600,color:"#374151"}},`${cat.icon} ${cat.name}`),
+                  h('span',{style:{fontWeight:700,color:cat.color}},`${fmt(t,data.currency)} `,h('span',{style:{color:"#9ca3af",fontWeight:400}},`(${pct.toFixed(1)}%)`))
+                ),
+                h('div',{style:{height:6,borderRadius:4,background:"#f3f4f6",overflow:"hidden"}},
+                  h('div',{style:{height:"100%",borderRadius:4,background:cat.color,width:`${pct}%`,transition:"width .5s ease"}})
+                )
+              );
+            }),
+        childTotal>0&&h('div',null,
+          h('p',{style:{...sec,marginTop:20}},"👨‍👩‍👧‍👦 Children's Costs"),
+          childCats.map(cn=>{
+            const t=catTotal(filterMonth,filterYear,cn);
+            if(!t)return null;
+            return h('div',{key:cn,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderRadius:10,marginBottom:6,background:"#fefce8",borderLeft:"3px solid #f59e0b"}},
+              h('span',{style:{fontSize:13,fontWeight:600,color:"#374151"}},cn),
+              h('span',{style:{fontWeight:700,color:"#d97706"}},fmt(t,data.currency))
+            );
+          }),
+          h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",borderRadius:10,background:"#fef3c7",borderLeft:"3px solid #f59e0b"}},
+            h('span',{style:{fontWeight:800,color:"#92400e"}},"Total Children"),
+            h('span',{style:{fontWeight:800,color:"#d97706",fontSize:16}},fmt(childTotal,data.currency))
+          )
+        )
+      ),
+      // Excel cheat sheet
+      h('div',{style:card},
+        h('p',{style:sec},`📊 Excel Update Guide — ${filterMonth} ${filterYear}`),
+        h('p',{style:{fontSize:12,color:"#6b7280",marginBottom:12}},
+          "Open your Family Budget Tracker Excel → go to the ",h('strong',null,filterMonth)," sheet → enter these totals:"),
+        h('div',{style:{background:"#f0fdf4",borderRadius:12,padding:14,marginBottom:10}},
+          h('div',{style:{fontWeight:700,fontSize:13,color:"#15803d",marginBottom:8}},"💵 INCOME"),
+          inc===0
+            ?h('p',{style:{fontSize:12,color:"#9ca3af",margin:0}},"No income logged")
+            :INCOME_SOURCES.map(src=>{
+                const entries=data.entries.filter(e=>e.month===filterMonth&&e.year===filterYear&&e.category===src.name&&e.type==="income");
+                const t=entries.reduce((s,e)=>s+e.amount,0);
+                if(!t)return null;
+                return h('div',{key:src.name,style:{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #bbf7d0",fontSize:13}},
+                  h('span',{style:{color:"#374151"}},src.name),
+                  h('strong',{style:{color:"#16a34a"}},fmt(t,data.currency))
+                );
+              })
+        ),
+        h('div',{style:{background:"#fef2f2",borderRadius:12,padding:14}},
+          h('div',{style:{fontWeight:700,fontSize:13,color:"#b91c1c",marginBottom:8}},"💸 EXPENSES"),
+          exp===0
+            ?h('p',{style:{fontSize:12,color:"#9ca3af",margin:0}},"No expenses logged")
+            :CATEGORIES.map(cat=>{
+                const t=catTotal(filterMonth,filterYear,cat.name);
+                if(!t)return null;
+                return h('div',{key:cat.name,style:{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #fecaca",fontSize:13}},
+                  h('span',{style:{color:"#374151"}},`${cat.icon} ${cat.name}`),
+                  h('strong',{style:{color:"#dc2626"}},fmt(t,data.currency))
+                );
+              })
+        )
+      )
+    );
+  };
+
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(160deg,#1e1b4b 0%,#312e81 60%,#1e1b4b 100%)",fontFamily:"system-ui,-apple-system,sans-serif"}},
+    h(Nav,null),
+    h('div',{style:{maxWidth:520,margin:"0 auto",padding:"16px 14px",paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 80px)"}},
+      view==="log"&&h(LogView,null),
+      view==="history"&&h(HistoryView,null),
+      view==="summary"&&h(SummaryView,null)
+    ),
+    delConfirm&&h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}},
+      h('div',{style:{background:"#fff",borderRadius:20,padding:28,maxWidth:300,width:"90%",textAlign:"center"}},
+        h('div',{style:{fontSize:42,marginBottom:10}},"🗑️"),
+        h('div',{style:{fontWeight:800,fontSize:16,marginBottom:6}},"Delete this entry?"),
+        h('div',{style:{color:"#9ca3af",fontSize:13,marginBottom:22}},"This cannot be undone."),
+        h('div',{style:{display:"flex",gap:10}},
+          h('button',{onClick:()=>setDelConfirm(null),style:{flex:1,padding:12,border:"2px solid #e5e7eb",borderRadius:12,background:"#fff",cursor:"pointer",fontWeight:700,fontSize:14,WebkitTapHighlightColor:"transparent"}},"Cancel"),
+          h('button',{onClick:()=>handleDelete(delConfirm),style:{flex:1,padding:12,border:"none",borderRadius:12,background:"#ef4444",color:"#fff",cursor:"pointer",fontWeight:700,fontSize:14,WebkitTapHighlightColor:"transparent"}},"Delete")
+        )
+      )
+    ),
+    toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)})
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+
+  </script>
+  <script>
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+  </script>
+</body>
+</html>
