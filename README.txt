@@ -1,26 +1,29 @@
-# FamilyBudget — Working Version
+# FamilyBudget — ALL ISSUES FIXED
+
+## ✅ FIXES
+1. Date field properly sized (no overflow)
+2. Safe area padding for iPhone notch/camera
+3. Add/remove years dynamically in Settings
+4. Receipt upload: Camera OR Photos (works both platforms)
+5. Multi-currency with FX rate prompts per entry
 
 ## ✨ ALL FEATURES
-✅ Multi-currency (SGD/USD/INR)  
-✅ Receipt photo upload
-✅ Backup/Restore  
-✅ CSV export
-✅ Custom categories  
+✅ Multi-currency with conversion tracking
+✅ Per-entry currency selection
+✅ FX rate prompts when needed
+✅ Receipt upload (camera/photos)
+✅ Backup/Restore
+✅ CSV export (includes conversions)
+✅ Custom categories
+✅ Dynamic year management
 ✅ Data reset
-✅ Years: 2026-2030
+✅ Safe area support (iPhone notch)
 
-## 🚀 Deploy to GitHub Pages
-
-1. github.com → New repository → "familybudget" → Public
+## 🚀 Deploy
+1. github.com → New repo → "familybudget"
 2. Upload all 4 files
 3. Settings → Pages → Branch: main → Save
 4. URL: https://YOUR-USERNAME.github.io/familybudget
 5. iPhone Safari → Add to Home Screen
 
-## 🔄 Update Your Live App
-
-1. github.com/YOUR-USERNAME/familybudget
-2. Click index.html → Edit (pencil icon)
-3. Copy NEW index.html content
-4. Paste → Commit
-5. Force refresh app on phone
+Works on iPhone AND Android!
