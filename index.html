@@ -186,7 +186,7 @@ function LogView({data,setData,showToast,cats,type,setType,category,setCategory,
       h('p',{style:sec},"Receipt (optional)"),
       !receiptImg
         ?h('label',{style:{display:"block",padding:"14px",border:"2px dashed #e2e8f0",borderRadius:14,textAlign:"center",cursor:"pointer",background:"#f8fafc",marginBottom:14}},
-          h('input',{type:"file",accept:"image/*",capture:"environment",onChange:handleReceiptUpload,style:{display:"none"}}),
+          h('input',{type:"file",accept:"image/*",onChange:handleReceiptUpload,style:{display:"none"}}),
           h('div',{style:{fontSize:13,color:"#a0aec0",fontWeight:500}},"📸 Camera or 🖼️ Photos")
         )
         :h('div',{style:{position:"relative",marginBottom:14}},
@@ -288,97 +288,188 @@ function HistoryView({data,filterMonth,setFilterMonth,filterYear,setFilterYear,y
 }
 
 function SummaryView({data,filterMonth,setFilterMonth,filterYear,setFilterYear,years,convertToBase,fmt}) {
-  const monthEntries=(m,y)=>data.entries.filter(e=>e.month===m&&e.year===y);
-  const monthTotal=(m,y,t)=>monthEntries(m,y).filter(e=>e.type===t).reduce((s,e)=>s+convertToBase(e.amount,e.currency),0);
-  const catTotal=(m,y,c)=>monthEntries(m,y).filter(e=>e.category===c).reduce((s,e)=>s+convertToBase(e.amount,e.currency),0);
-  const inc=monthTotal(filterMonth,filterYear,"income");
-  const exp=monthTotal(filterMonth,filterYear,"expense");
-  const net=inc-exp;
-  const rate=inc>0?(net/inc*100).toFixed(1):"—";
+  const [tab,setTab] = React.useState("month");
+
+  // ── helpers ──
+  const yearEntries  = y => data.entries.filter(e=>e.year===y);
+  const monthEntries = (m,y) => data.entries.filter(e=>e.month===m&&e.year===y);
+
+  const sumType = (entries,t) => entries.filter(e=>e.type===t).reduce((s,e)=>s+convertToBase(e.amount,e.currency),0);
+  const sumCat  = (entries,c) => entries.filter(e=>e.category===c).reduce((s,e)=>s+convertToBase(e.amount,e.currency),0);
+
+  // ── monthly ──
+  const mEntries = monthEntries(filterMonth,filterYear);
+  const mInc=sumType(mEntries,"income"), mExp=sumType(mEntries,"expense"), mNet=mInc-mExp;
+  const mRate=mInc>0?(mNet/mInc*100).toFixed(1):"—";
+
+  // ── yearly ──
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const isPartial = filterYear===currentYear;
+  // For YTD: only include months up to current month
+  const ytdMonthIdx = now.getMonth(); // 0-based
+  const yAll = yearEntries(filterYear);
+  const yEntries = isPartial ? yAll.filter(e=>MONTHS.indexOf(e.month)<=ytdMonthIdx) : yAll;
+  const yInc=sumType(yEntries,"income"), yExp=sumType(yEntries,"expense"), yNet=yInc-yExp;
+  const yRate=yInc>0?(yNet/yInc*100).toFixed(1):"—";
+  // monthly breakdown for year chart
+  const monthlyExp = MONTHS.map((m,i)=>{
+    if(isPartial && i>ytdMonthIdx) return null;
+    return {month:m,value:sumType(monthEntries(m,filterYear),"expense"),inc:sumType(monthEntries(m,filterYear),"income")};
+  }).filter(Boolean);
+  const maxMonthlyVal = Math.max(...monthlyExp.map(x=>Math.max(x.value,x.inc)),1);
+
   const childCats=["Children — School Fees","Children — Tuition","Children — Activities","Children — Misc"];
-  const childTotal=childCats.reduce((s,c)=>s+catTotal(filterMonth,filterYear,c),0);
-  return h('div',null,
-    h('div',{style:{...card,display:"flex",gap:8,alignItems:"center",padding:"12px 16px"}},
-      h('select',{value:filterMonth,onChange:e=>setFilterMonth(e.target.value),style:{...inp,width:"auto",padding:"7px 12px",fontSize:13}},MONTHS.map(m=>h('option',{key:m},m))),
-      h('select',{value:filterYear,onChange:e=>setFilterYear(Number(e.target.value)),style:{...inp,width:85,padding:"7px 12px",fontSize:13}},years.map(y=>h('option',{key:y},y)))
-    ),
-    h('div',{style:card},
-      h('p',{style:sec},`Summary — ${filterMonth} ${filterYear} (in ${data.baseCurrency})`),
-      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}},
-        [["Total Income",fmt(inc,data.baseCurrency),"#16a34a","#f0fdf4","💵"],
-         ["Total Expenses",fmt(exp,data.baseCurrency),"#dc2626","#fef2f2","💸"],
-         ["Net Savings",(net<0?"−":"")+fmt(Math.abs(net),data.baseCurrency),net>=0?"#2563eb":"#dc2626","#eff6ff","💰"],
-         ["Savings Rate",`${rate}%`,"#7c3aed","#f5f3ff","📊"]
-        ].map(([l,v,col,bg,ic])=>
-          h('div',{key:l,style:{padding:"16px 14px",borderRadius:14,background:bg}},
-            h('div',{style:{fontSize:22}},ic),
-            h('div',{style:{fontSize:10,color:"#9ca3af",fontWeight:700,marginTop:6,textTransform:"uppercase",letterSpacing:1}},l),
-            h('div',{style:{fontSize:16,fontWeight:800,color:col,marginTop:3}},v)
-          )
+
+  const StatsGrid = ({inc,exp,net,rate}) =>
+    h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}},
+      [["Total Income",fmt(inc,data.baseCurrency),"#16a34a","#f0fdf4","💵"],
+       ["Total Expenses",fmt(exp,data.baseCurrency),"#dc2626","#fef2f2","💸"],
+       ["Net Savings",(net<0?"−":"")+fmt(Math.abs(net),data.baseCurrency),net>=0?"#2563eb":"#dc2626","#eff6ff","💰"],
+       ["Savings Rate",`${rate}%`,"#7c3aed","#f5f3ff","📊"]
+      ].map(([l,v,col,bg,ic])=>
+        h('div',{key:l,style:{padding:"15px 13px",borderRadius:14,background:bg}},
+          h('div',{style:{fontSize:20}},ic),
+          h('div',{style:{fontSize:10,color:"#9ca3af",fontWeight:700,marginTop:5,textTransform:"uppercase",letterSpacing:1}},l),
+          h('div',{style:{fontSize:15,fontWeight:800,color:col,marginTop:2}},v)
         )
+      )
+    );
+
+  const CatBreakdown = ({entries,totalExp}) => {
+    if(totalExp===0) return h('p',{style:{color:"#a0aec0",fontSize:13,textAlign:"center",padding:"12px 0"}},"No expenses");
+    return h('div',null,
+      (data.expenseCategories||DEFAULT_EXPENSE_CATS).map(cat=>{
+        const t=sumCat(entries.filter(e=>e.type==="expense"),cat.name);
+        if(!t) return null;
+        const pct=totalExp>0?Math.min(100,(t/totalExp)*100):0;
+        return h('div',{key:cat.name,style:{marginBottom:10}},
+          h('div',{style:{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}},
+            h('span',{style:{fontWeight:600,color:"#374151"}},`${cat.icon} ${cat.name}`),
+            h('span',{style:{fontWeight:700,color:cat.color}},`${fmt(t,data.baseCurrency)} `,
+              h('span',{style:{color:"#9ca3af",fontWeight:400}},`(${pct.toFixed(1)}%)`))
+          ),
+          h('div',{style:{height:6,borderRadius:4,background:"#f0f4f8",overflow:"hidden"}},
+            h('div',{style:{height:"100%",borderRadius:4,background:cat.color,width:`${pct}%`,transition:"width .5s ease"}})
+          )
+        );
+      })
+    );
+  };
+
+  const ChildrenCard = ({entries}) => {
+    const total=childCats.reduce((s,c)=>s+sumCat(entries,c),0);
+    if(!total) return null;
+    return h('div',{style:{marginTop:4}},
+      h('p',{style:{...sec,marginTop:16}},"👨‍👩‍👧‍👦 Children's Costs"),
+      childCats.map(cn=>{
+        const t=sumCat(entries,cn);
+        if(!t) return null;
+        return h('div',{key:cn,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 13px",borderRadius:10,marginBottom:6,background:"#fefce8",borderLeft:"3px solid #f59e0b"}},
+          h('span',{style:{fontSize:13,fontWeight:600,color:"#374151"}},cn),
+          h('span',{style:{fontWeight:700,color:"#d97706"}},fmt(t,data.baseCurrency))
+        );
+      }),
+      h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 13px",borderRadius:10,background:"#fef3c7",borderLeft:"3px solid #f59e0b"}},
+        h('span',{style:{fontWeight:800,color:"#92400e"}},"Total Children"),
+        h('span',{style:{fontWeight:800,color:"#d97706",fontSize:15}},fmt(total,data.baseCurrency))
+      )
+    );
+  };
+
+  return h('div',null,
+    // ── Filter bar ──
+    h('div',{style:{...card,padding:"11px 14px"}},
+      h('div',{style:{display:"flex",gap:8,alignItems:"center",marginBottom:10}},
+        h('select',{value:filterMonth,onChange:e=>setFilterMonth(e.target.value),style:{...inp,width:"auto",padding:"7px 12px",fontSize:13,flex:1}},MONTHS.map(m=>h('option',{key:m},m))),
+        h('select',{value:filterYear,onChange:e=>setFilterYear(Number(e.target.value)),style:{...inp,width:90,padding:"7px 12px",fontSize:13}},years.map(y=>h('option',{key:y},y)))
       ),
-      h('p',{style:sec},"Expense Breakdown"),
-      exp===0
-        ?h('p',{style:{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"12px 0"}},"No expenses")
-        :(data.expenseCategories||DEFAULT_EXPENSE_CATS).map(cat=>{
-            const t=catTotal(filterMonth,filterYear,cat.name);
-            if(!t)return null;
-            const pct=exp>0?Math.min(100,(t/exp)*100):0;
-            return h('div',{key:cat.name,style:{marginBottom:10}},
-              h('div',{style:{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}},
-                h('span',{style:{fontWeight:600,color:"#374151"}},`${cat.icon} ${cat.name}`),
-                h('span',{style:{fontWeight:700,color:cat.color}},`${fmt(t,data.baseCurrency)} `,h('span',{style:{color:"#9ca3af",fontWeight:400}},`(${pct.toFixed(1)}%)`))
-              ),
-              h('div',{style:{height:6,borderRadius:4,background:"#f3f4f6",overflow:"hidden"}},
-                h('div',{style:{height:"100%",borderRadius:4,background:cat.color,width:`${pct}%`,transition:"width .5s ease"}})
-              )
-            );
-          }),
-      childTotal>0&&h('div',null,
-        h('p',{style:{...sec,marginTop:20}},"👨‍👩‍👧‍👦 Children's Costs"),
-        childCats.map(cn=>{
-          const t=catTotal(filterMonth,filterYear,cn);
-          if(!t)return null;
-          return h('div',{key:cn,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderRadius:10,marginBottom:6,background:"#fefce8",borderLeft:"3px solid #f59e0b"}},
-            h('span',{style:{fontSize:13,fontWeight:600,color:"#374151"}},cn),
-            h('span',{style:{fontWeight:700,color:"#d97706"}},fmt(t,data.baseCurrency))
-          );
-        }),
-        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",borderRadius:10,background:"#fef3c7",borderLeft:"3px solid #f59e0b"}},
-          h('span',{style:{fontWeight:800,color:"#92400e"}},"Total Children"),
-          h('span',{style:{fontWeight:800,color:"#d97706",fontSize:16}},fmt(childTotal,data.baseCurrency))
+      // Month / Year tab toggle
+      h('div',{style:{display:"flex",background:"#f0f4f8",borderRadius:12,padding:3,gap:2}},
+        [["month","📅 Monthly"],["year","📆 Yearly"]].map(([t,l])=>
+          h('button',{key:t,onClick:()=>setTab(t),style:{
+            flex:1,padding:"8px 0",borderRadius:9,border:"none",
+            background:tab===t?"#fff":"transparent",
+            color:tab===t?"#312e81":"#6b7280",
+            fontWeight:tab===t?700:500,fontSize:13,cursor:"pointer",
+            boxShadow:tab===t?"0 1px 4px rgba(0,0,0,0.1)":"none",
+            transition:"all .15s"
+          }},l)
         )
       )
     ),
-    h('div',{style:card},
-      h('p',{style:sec},`📊 Excel Update — ${filterMonth} ${filterYear}`),
-      h('p',{style:{fontSize:12,color:"#6b7280",marginBottom:12}},"Copy these totals (in "+data.baseCurrency+"):"),
-      h('div',{style:{background:"#f0fdf4",borderRadius:12,padding:14,marginBottom:10}},
-        h('div',{style:{fontWeight:700,fontSize:13,color:"#15803d",marginBottom:8}},"💵 INCOME"),
-        inc===0
-          ?h('p',{style:{fontSize:12,color:"#9ca3af",margin:0}},"No income")
-          :(data.incomeCategories||DEFAULT_INCOME_CATS).map(src=>{
-              const entries=data.entries.filter(e=>e.month===filterMonth&&e.year===filterYear&&e.category===src.name&&e.type==="income");
-              const t=entries.reduce((s,e)=>s+convertToBase(e.amount,e.currency),0);
-              if(!t)return null;
-              return h('div',{key:src.name,style:{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #bbf7d0",fontSize:13}},
-                h('span',{style:{color:"#374151"}},src.name),
-                h('strong',{style:{color:"#16a34a"}},fmt(t,data.baseCurrency))
+
+    // ══ MONTHLY TAB ══
+    tab==="month"&&h('div',null,
+      h('div',{style:card},
+        h('p',{style:sec},`${filterMonth} ${filterYear} · in ${data.baseCurrency}`),
+        h(StatsGrid,{inc:mInc,exp:mExp,net:mNet,rate:mRate}),
+        h('p',{style:sec},"Expense Breakdown"),
+        h(CatBreakdown,{entries:mEntries,totalExp:mExp}),
+        h(ChildrenCard,{entries:mEntries})
+      )
+    ),
+
+    // ══ YEARLY TAB ══
+    tab==="year"&&h('div',null,
+      h('div',{style:card},
+        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},
+          h('p',{style:{...sec,margin:0}},`${filterYear} · in ${data.baseCurrency}`),
+          isPartial&&h('span',{style:{
+            fontSize:10,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",
+            padding:"3px 9px",borderRadius:20,letterSpacing:0.5
+          }},"YTD thru "+filterMonth)
+        ),
+        h(StatsGrid,{inc:yInc,exp:yExp,net:yNet,rate:yRate}),
+
+        // ── Monthly bar chart ──
+        yEntries.length>0&&h('div',{style:{marginBottom:18}},
+          h('p',{style:sec},"Month-by-Month"),
+          h('div',{style:{display:"flex",alignItems:"flex-end",gap:4,height:80,marginBottom:6}},
+            monthlyExp.map(({month,value,inc})=>{
+              const expH=Math.round((value/maxMonthlyVal)*72);
+              const incH=Math.round((inc/maxMonthlyVal)*72);
+              return h('div',{key:month,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
+                h('div',{style:{width:"100%",display:"flex",gap:1,alignItems:"flex-end",height:74}},
+                  h('div',{style:{flex:1,height:incH||2,background:"#22c55e",borderRadius:"3px 3px 0 0",minHeight:2,opacity:0.85}}),
+                  h('div',{style:{flex:1,height:expH||2,background:"#ef4444",borderRadius:"3px 3px 0 0",minHeight:2,opacity:0.85}})
+                ),
+                h('div',{style:{fontSize:8,color:"#a0aec0",fontWeight:600,marginTop:2}},month.slice(0,1))
               );
             })
+          ),
+          h('div',{style:{display:"flex",gap:12,justifyContent:"center"}},
+            [["#22c55e","Income"],["#ef4444","Expenses"]].map(([col,label])=>
+              h('div',{key:label,style:{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#6b7280"}},
+                h('div',{style:{width:8,height:8,borderRadius:2,background:col}}),label
+              )
+            )
+          )
+        ),
+
+        h('p',{style:sec},"Expense Breakdown"),
+        h(CatBreakdown,{entries:yEntries,totalExp:yExp}),
+        h(ChildrenCard,{entries:yEntries})
       ),
-      h('div',{style:{background:"#fef2f2",borderRadius:12,padding:14}},
-        h('div',{style:{fontWeight:700,fontSize:13,color:"#b91c1c",marginBottom:8}},"💸 EXPENSES"),
-        exp===0
-          ?h('p',{style:{fontSize:12,color:"#9ca3af",margin:0}},"No expenses")
-          :(data.expenseCategories||DEFAULT_EXPENSE_CATS).map(cat=>{
-              const t=catTotal(filterMonth,filterYear,cat.name);
-              if(!t)return null;
-              return h('div',{key:cat.name,style:{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #fecaca",fontSize:13}},
-                h('span',{style:{color:"#374151"}},`${cat.icon} ${cat.name}`),
-                h('strong',{style:{color:"#dc2626"}},fmt(t,data.baseCurrency))
-              );
+
+      // ── Month-by-month table ──
+      yEntries.length>0&&h('div',{style:card},
+        h('p',{style:sec},`Monthly breakdown · ${filterYear}`),
+        h('div',{style:{display:"grid",gridTemplateColumns:"auto 1fr 1fr 1fr",gap:"8px 10px",alignItems:"center"}},
+          ["Month","Income","Expenses","Net"].map(h2=>
+            h('div',{key:h2,style:{fontSize:10,fontWeight:700,color:"#a0aec0",textTransform:"uppercase",letterSpacing:1}},h2)
+          ).concat(
+            monthlyExp.flatMap(({month,value,inc})=>{
+              const net=inc-value;
+              return [
+                h('div',{key:month+"m",style:{fontSize:13,fontWeight:600,color:"#374151"}},month),
+                h('div',{key:month+"i",style:{fontSize:13,fontWeight:700,color:"#16a34a"}},inc>0?fmt(inc,data.baseCurrency):"—"),
+                h('div',{key:month+"e",style:{fontSize:13,fontWeight:700,color:"#dc2626"}},value>0?fmt(value,data.baseCurrency):"—"),
+                h('div',{key:month+"n",style:{fontSize:13,fontWeight:700,color:net>=0?"#2563eb":"#dc2626"}},(net<0?"−":"")+fmt(Math.abs(net),data.baseCurrency))
+              ];
             })
+          )
+        )
       )
     )
   );
